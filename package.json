@@ -1,0 +1,22 @@
+{
+  "name": "doc-scanner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Photo to scanner-style PDF. Web UI (WebView2 / Android WebView) powered by OpenCV.js",
+  "scripts": {
+    "prepare-libs": "node scripts/prepare.js",
+    "serve": "npx http-server www -p 8765",
+    "android:build": "npm run prepare-libs && npx cap add android && node scripts/patch-android.js && npx cap sync android && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/filesystem": "^6.0.0",
+    "@capacitor/share": "^6.0.0",
+    "@techstark/opencv-js": "4.9.0-release.3",
+    "jspdf": "^2.5.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0"
+  }
+}

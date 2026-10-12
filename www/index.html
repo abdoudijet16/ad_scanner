@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#14161a">
+<title>ماسح الملفات</title>
+<style>
+:root{--bg:#14161a;--panel:#1c1f26;--line:#2b303b;--fg:#e6e8ee;--mut:#8b93a5;--acc:#4f8cff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:var(--bg);color:var(--fg);font:14px system-ui,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;
+ padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+button{background:#2a3040;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:9px 12px;font:inherit;cursor:pointer}
+button:active{background:#3a4358}button.p{background:var(--acc);border-color:var(--acc)}
+header{display:flex;gap:6px;align-items:center;padding:8px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header .sp{flex:1}
+#thumbs{display:flex;gap:8px;overflow-x:auto;padding:8px;background:var(--panel);border-bottom:1px solid var(--line);min-height:84px}
+.th{position:relative;flex:0 0 auto;height:66px;border:2px solid transparent;border-radius:6px;overflow:hidden;cursor:pointer}
+.th.on{border-color:var(--acc)}.th img{height:100%;display:block}
+.th b{position:absolute;left:3px;top:3px;background:#000b;padding:0 5px;border-radius:4px;font-size:11px}
+#work{flex:1;min-height:0;display:flex;flex-direction:column}
+#tabs{display:flex;gap:6px;padding:6px 8px}#tabs button{flex:1}#tabs button.on{background:var(--acc);border-color:var(--acc)}
+#stage{flex:1;min-height:0;display:grid;grid-template-columns:1fr;gap:8px;padding:0 8px 8px}
+.box{position:relative;background:#0c0d10;border:1px solid var(--line);border-radius:10px;overflow:hidden;min-height:0}
+.box canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#res{object-fit:contain}
+#busy{position:absolute;right:10px;top:8px;z-index:3;display:none;color:var(--acc);font-size:12px}
+.lbl{position:absolute;left:8px;top:6px;z-index:2;color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.06em;pointer-events:none}
+#bar{display:flex;gap:6px;padding:0 8px 8px;overflow-x:auto}#bar button{flex:0 0 auto}
+details{background:var(--panel);border-top:1px solid var(--line)}
+summary{padding:10px 12px;cursor:pointer;color:var(--mut);text-transform:uppercase;font-size:12px;letter-spacing:.08em}
+#settings{max-height:38vh;overflow:auto;padding:0 12px 10px;display:grid;grid-template-columns:1fr;gap:2px 24px}
+h4{margin:12px 0 4px;color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.08em;grid-column:1/-1}
+.row{display:grid;grid-template-columns:110px 1fr 38px;gap:8px;align-items:center;margin:4px 0}.row.s{grid-template-columns:110px 1fr}
+.row span{text-align:right;color:var(--mut)}
+select,input[type=text]{width:100%;background:#12141a;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px;font:inherit}
+input[type=range]{width:100%}input[type=checkbox]{width:20px;height:20px}
+#cam{position:fixed;inset:0;background:#000;z-index:50;display:none;flex-direction:column;
+ padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+#vid{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
+#camBar{display:flex;align-items:center;justify-content:space-around;padding:14px}
+#shot{width:72px;height:72px;border-radius:50%;border:5px solid #fff;background:var(--acc)}
+#boot{position:fixed;inset:0;z-index:99;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--mut)}
+@media(min-width:900px){
+ body{display:grid;grid-template-columns:150px 1fr 320px;grid-template-rows:auto 1fr}
+ header{grid-column:1/4}
+ #thumbs{flex-direction:column;overflow:auto;border-bottom:0;border-right:1px solid var(--line)}
+ .th{height:auto;width:100%}.th img{width:100%;height:auto}
+ #tabs{display:none}#stage{grid-template-columns:1fr 1fr;padding-top:8px}.box{display:block!important}
+ #sideWrap{border-left:1px solid var(--line);background:var(--panel);overflow:auto;display:flex;flex-direction:column}
+ details{border:0;flex:1}details>summary{display:none}#settings{max-height:none}
+}
+</style></head><body>
+<div id="boot">Loading scanner engine…</div>
+
+<header>
+ <b style="font-size:16px;margin:0 4px">ماسح الملفات</b>
+ <button class="p" onclick="openCam()">📷 Camera</button>
+ <button onclick="$('fcam').click()">Take photo</button>
+ <button onclick="$('ffile').click()">Gallery / files</button>
+ <span class="sp" id="status"></span>
+ <button class="p" onclick="save()">Save PDF</button>
+</header>
+
+<div id="thumbs"></div>
+
+<div id="work">
+ <div id="tabs"><button id="tCrop" class="on" onclick="tab('crop')">Crop</button><button id="tRes" onclick="tab('res')">Result</button></div>
+ <div id="stage">
+  <div class="box" id="bCrop"><div class="lbl">Crop – drag corners</div><canvas id="crop"></canvas></div>
+  <div class="box" id="bRes"><div class="lbl">Result</div><div id="busy">processing…</div><canvas id="res"></canvas></div>
+ </div>
+ <div id="bar">
+  <button onclick="auto()">Auto-detect</button><button onclick="fullPage()">Full page</button>
+  <button onclick="rot(-90)">⟲</button><button onclick="rot(90)">⟳</button>
+  <button onclick="mv(-1)">◀</button><button onclick="mv(1)">▶</button><button onclick="del()">🗑</button>
+ </div>
+</div>
+
+<div id="sideWrap"><details open><summary>Settings</summary><div id="settings"></div></details></div>
+
+<div id="cam">
+ <video id="vid" autoplay playsinline muted></video>
+ <div id="camBar">
+  <button onclick="closeCam()">Done (<span id="camN">0</span>)</button>
+  <button id="shot" onclick="shoot()"></button>
+  <button id="torch" onclick="torch()">🔦</button>
+ </div>
+</div>
+
+<input type="file" id="fcam" accept="image/*" capture="environment" hidden>
+<input type="file" id="ffile" accept="image/*" multiple hidden>
+
+<script src="lib/opencv.js"></script>
+<script src="lib/jspdf.umd.min.js"></script>
+<script src="scanner.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const tick=()=>new Promise(r=>setTimeout(r,0));
+const CTRL=[
+ ['h','Enhance'],
+ ['filter','Filter','select',[['color','Original color (exact)'],['magic','Magic color'],['gray','Grayscale'],['bw','Black & white']],'color'],
+ ['shape','Page shape','select',[['snap','Auto (snap to A4/Letter)'],['natural','Natural (as photographed)'],['A4','A4'],['Letter','Letter'],['Legal','Legal']],'snap'],
+ ['shadow','Remove shadows','check',,,,false],
+ ['whitepoint','Whiten paper','check',,,,false],
+ ['deskew','Auto straighten','check',,,,false],
+ ['brightness','Brightness','range',-100,100,1,0],
+ ['contrast','Contrast %','range',50,200,1,100],
+ ['sharpen','Sharpen','range',0,300,5,0],
+ ['denoise','Denoise','range',0,20,1,0],
+ ['crop','Trim edges %','range',0,8,.5,0],
+ ['block','B&W detail','range',11,81,2,31],
+ ['C','B&W cleanliness','range',2,40,1,15],
+ ['despeckle','B&W despeckle','check',,,,false]];
+const OPT=[
+ ['h','Export'],
+ ['page','PDF page size','select',[['A4','A4'],['Letter','Letter'],['Legal','Legal'],['Original','Original (fit image)']],'A4'],
+ ['dpi','Resolution','select',[['150','150 dpi'],['200','200 dpi'],['300','300 dpi'],['400','400 dpi'],['600','600 dpi']],'300'],
+ ['quality','JPEG quality','range',40,100,1,85],
+ ['margin','Margin mm','range',0,25,1,0]];
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const saved=store.get('ds2.settings')||{};
+function build(list,box,live){list.forEach(([id,label,t,a,b,st,d])=>{
+ if(id==='h'){const h=document.createElement('h4');h.textContent=label;box.appendChild(h);return}
+ if(saved[id]!==undefined)(t==='select'?(b=saved[id]):(d=saved[id]));
+ const r=document.createElement('div');r.className='row'+(t==='range'?'':' s');let h=`<label>${label}</label>`;
+ if(t==='select')h+=`<select id="${id}">`+a.map(o=>`<option value="${o[0]}"${o[0]==b?' selected':''}>${o[1]}</option>`).join('')+'</select>';
+ else if(t==='range')h+=`<input type="range" id="${id}" min="${a}" max="${b}" step="${st}" value="${d}"><span id="v_${id}">${d}</span>`;
+ else h+=`<input type="checkbox" id="${id}"${d?' checked':''}>`;
+ r.innerHTML=h;box.appendChild(r);
+ r.querySelector('#'+id).addEventListener('input',()=>{const v=$('v_'+id);if(v)v.textContent=$(id).value;
+  store.set('ds2.settings',Object.assign(read(CTRL),read(OPT)));if(live)sched()})})}
+function read(list){const s={};list.forEach(([id,,t])=>{if(id==='h')return;const e=$(id);s[id]=t==='check'?e.checked:(t==='range'?+e.value:e.value)});return s}
+build(CTRL,$('settings'),true);build(OPT,$('settings'),false);
+
+/* ---------- state ---------- */
+let pages=[],cur=-1,drag=-1,timer,seq=0,geo={},uid=0;
+const settings=()=>Object.assign(read(CTRL),{rotate:cur>=0?pages[cur].rotate:0});
+const sched=()=>{clearTimeout(timer);timer=setTimeout(refresh,200)};
+const say=t=>$('status').textContent=t;
+function tab(w){$('bCrop').style.display=w==='crop'?'block':'none';$('bRes').style.display=w==='res'?'block':'none';
+ $('tCrop').classList.toggle('on',w==='crop');$('tRes').classList.toggle('on',w==='res');
+ if(w==='crop')drawCrop();else refresh()}
+function narrow(){return innerWidth<900}
+addEventListener('resize',()=>{if(!narrow()){$('bCrop').style.display=$('bRes').style.display='block'}drawCrop()});
+
+/* ---------- loading photos ---------- */
+async function decode(blob,maxEdge){const bmp=await createImageBitmap(blob);
+ const s=Math.min(1,maxEdge/Math.max(bmp.width,bmp.height)),c=document.createElement('canvas');
+ c.width=Math.round(bmp.width*s);c.height=Math.round(bmp.height*s);c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);bmp.close&&bmp.close();return c}
+async function addBlob(blob){
+ const small=await decode(blob,1600),src=cv.imread(small);
+ const corners=Scan.detectCorners(src);src.delete();
+ const t=document.createElement('canvas');t.width=160;t.height=Math.round(160*small.height/small.width);
+ t.getContext('2d').drawImage(small,0,0,t.width,t.height);
+ pages.push({id:uid++,blob,small,corners,rotate:0,thumb:t.toDataURL('image/jpeg',.6)});
+}
+async function addFiles(files){if(!files.length)return;say('Detecting document…');await tick();
+ const first=pages.length;
+ for(const f of files){try{await addBlob(f)}catch(e){say('Could not read '+f.name)}}
+ thumbs();if(pages.length>first)select(first);say(pages.length+' page(s)')}
+$('fcam').onchange=e=>{addFiles([...e.target.files]);e.target.value=''};
+$('ffile').onchange=e=>{addFiles([...e.target.files]);e.target.value=''};
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();addFiles([...e.dataTransfer.files].filter(f=>f.type.startsWith('image/')))});
+
+/* ---------- live camera ---------- */
+let stream,track,torchOn=false,camCount=0;
+async function openCam(){
+ try{
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:3840},height:{ideal:2160}},audio:false});
+ }catch(e){say('Camera unavailable – using system camera');$('fcam').click();return}
+ $('vid').srcObject=stream;track=stream.getVideoTracks()[0];camCount=0;$('camN').textContent=0;
+ $('cam').style.display='flex';
+ try{await track.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
+ const caps=(track.getCapabilities&&track.getCapabilities())||{};$('torch').style.visibility=caps.torch?'visible':'hidden'}
+async function torch(){torchOn=!torchOn;try{await track.applyConstraints({advanced:[{torch:torchOn}]})}catch(e){}}
+async function shoot(){
+ let blob=null;
+ if(window.ImageCapture){try{blob=await new ImageCapture(track).takePhoto()}catch(e){blob=null}}
+ if(!blob){const v=$('vid'),c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;
+  c.getContext('2d').drawImage(v,0,0);blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.95))}
+ await addBlob(blob);camCount++;$('camN').textContent=camCount;thumbs()}
+function closeCam(){if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('cam').style.display='none';
+ if(camCount){select(pages.length-camCount);say(pages.length+' page(s)')}}
+
+/* ---------- thumbs / selection ---------- */
+function thumbs(){const t=$('thumbs');t.innerHTML='';pages.forEach((p,i)=>{const d=document.createElement('div');
+ d.className='th'+(i===cur?' on':'');d.innerHTML=`<img src="${p.thumb}"><b>${i+1}</b>`;d.onclick=()=>select(i);t.appendChild(d)})}
+function select(i){cur=i;thumbs();drawCrop();refresh()}
+
+/* ---------- crop editor ---------- */
+function drawCrop(){
+ const cv2=$('crop'),ctx=cv2.getContext('2d'),box=cv2.parentElement,dpr=devicePixelRatio||1,W=box.clientWidth,H=box.clientHeight;
+ if(!W||!H)return;cv2.width=W*dpr;cv2.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+ if(cur<0)return;const img=pages[cur].small,iw0=img.width,ih0=img.height;
+ const s=Math.min(W/iw0,H/ih0)*.92,iw=iw0*s,ih=ih0*s,ox=(W-iw)/2,oy=(H-ih)/2;geo={ox,oy,iw,ih};
+ ctx.drawImage(img,ox,oy,iw,ih);
+ const P=pages[cur].corners.map(([x,y])=>[ox+x*iw,oy+y*ih]);
+ ctx.fillStyle='rgba(79,140,255,.15)';ctx.strokeStyle='#4f8cff';ctx.lineWidth=2;ctx.beginPath();
+ P.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fill();ctx.stroke();
+ P.forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],10,0,7);ctx.fillStyle='#fff';ctx.fill();ctx.stroke()});
+ if(drag>=0){ // loupe
+  const [px,py]=P[drag],R=56,lx=Math.min(W-R-4,Math.max(R+4,px)),ly=py-R-50<R?py+R+50:py-R-50,z=3,sr=R/z;
+  ctx.save();ctx.beginPath();ctx.arc(lx,ly,R,0,7);ctx.clip();ctx.fillStyle='#000';ctx.fill();
+  const cx=(px-ox)/s,cy=(py-oy)/s;ctx.drawImage(img,cx-sr,cy-sr,2*sr,2*sr,lx-R,ly-R,2*R,2*R);ctx.restore();
+  ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(lx,ly,R,0,7);ctx.stroke();
+  ctx.strokeStyle='#f55';ctx.beginPath();ctx.moveTo(lx-10,ly);ctx.lineTo(lx+10,ly);ctx.moveTo(lx,ly-10);ctx.lineTo(lx,ly+10);ctx.stroke()}}
+const cvEl=$('crop');
+cvEl.onpointerdown=e=>{if(cur<0)return;const r=cvEl.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let best=-1,bd=60*60;
+ pages[cur].corners.forEach(([cx,cy],i)=>{const d=(geo.ox+cx*geo.iw-x)**2+(geo.oy+cy*geo.ih-y)**2;if(d<bd){bd=d;best=i}});
+ if(best>=0){drag=best;cvEl.setPointerCapture(e.pointerId);drawCrop()}};
+cvEl.onpointermove=e=>{if(drag<0)return;const r=cvEl.getBoundingClientRect();
+ pages[cur].corners[drag]=[Math.min(1,Math.max(0,(e.clientX-r.left-geo.ox)/geo.iw)),Math.min(1,Math.max(0,(e.clientY-r.top-geo.oy)/geo.ih))];drawCrop()};
+cvEl.onpointerup=cvEl.onpointercancel=()=>{if(drag>=0){drag=-1;drawCrop();sched()}};
+
+/* ---------- actions ---------- */
+function auto(){if(cur<0)return;const s=cv.imread(pages[cur].small);pages[cur].corners=Scan.detectCorners(s);s.delete();drawCrop();refresh()}
+function fullPage(){if(cur<0)return;pages[cur].corners=[[0,0],[1,0],[1,1],[0,1]];drawCrop();refresh()}
+function rot(d){if(cur<0)return;pages[cur].rotate=(pages[cur].rotate+d+360)%360;refresh()}
+function mv(d){const j=cur+d;if(cur<0||j<0||j>=pages.length)return;[pages[cur],pages[j]]=[pages[j],pages[cur]];cur=j;thumbs()}
+function del(){if(cur<0)return;pages.splice(cur,1);cur=Math.min(cur,pages.length-1);thumbs();
+ if(cur>=0)select(cur);else{drawCrop();const c=$('res');c.getContext('2d').clearRect(0,0,c.width,c.height)}}
+
+async function refresh(){
+ if(cur<0)return;const my=++seq;$('busy').style.display='block';await tick();if(my!==seq)return;
+ if(narrow()&&$('bRes').style.display==='none'){$('busy').style.display='none';return}
+ const p=pages[cur];let src,w,w2,out;
+ try{src=cv.imread(p.small);w=Scan.warp(src,p.corners,settings().shape);w2=Scan.capEdge(w,1400);out=Scan.process(w2,settings());cv.imshow('res',out)}
+ catch(e){say('Error: '+e)}
+ [src,w,w2,out].forEach(m=>m&&m.delete());if(my===seq)$('busy').style.display='none'}
+
+/* ---------- export ---------- */
+async function save(){
+ if(!pages.length){say('Add a photo first');return}
+ const s=read(CTRL),o=read(OPT),dpi=+o.dpi,{jsPDF}=window.jspdf;let doc=null;
+ try{
+  for(let i=0;i<pages.length;i++){
+   say(`Processing page ${i+1}/${pages.length}…`);await tick();
+   const p=pages[i],full=await decode(p.blob,4200),src=cv.imread(full);
+   const wp=Scan.warp(src,p.corners,s.shape);
+   const maxEdge=Math.round(dpi*(o.page==='Original'?14:Math.max(...Scan.PAGE_MM[o.page])/25.4));
+   const w2=Scan.capEdge(wp,maxEdge),out=Scan.process(w2,Object.assign({},s,{rotate:p.rotate}));
+   const c=document.createElement('canvas');cv.imshow(c,out);
+   [src,wp,w2,out].forEach(m=>m.delete());
+   const bw=s.filter==='bw',data=c.toDataURL(bw?'image/png':'image/jpeg',o.quality/100),iw=c.width,ih=c.height;
+   let pw,ph;if(o.page==='Original'){pw=iw/dpi*25.4;ph=ih/dpi*25.4}else{[pw,ph]=Scan.PAGE_MM[o.page];if(iw>ih)[pw,ph]=[ph,pw]}
+   const fmt=[Math.min(pw,ph),Math.max(pw,ph)],ori=pw>ph?'l':'p';
+   if(!doc)doc=new jsPDF({orientation:ori,unit:'mm',format:fmt,compress:true});else doc.addPage(fmt,ori);
+   const m=+o.margin,k=Math.min((pw-2*m)/iw,(ph-2*m)/ih),dw=iw*k,dh=ih*k;
+   doc.addImage(data,bw?'PNG':'JPEG',(pw-dw)/2,(ph-dh)/2,dw,dh,undefined,'FAST');
+  }
+  const name='scan_'+new Date().toISOString().replace(/[:T]/g,'-').slice(0,19)+'.pdf';
+  const C=window.Capacitor;
+  if(C&&C.isNativePlatform&&C.isNativePlatform()){
+   const b64=doc.output('datauristring').split(',')[1];
+   const r=await C.Plugins.Filesystem.writeFile({path:name,data:b64,directory:'CACHE'});
+   await C.Plugins.Share.share({title:name,url:r.uri,dialogTitle:'Save or share PDF'});
+  }else doc.save(name);
+  say('Saved '+name);
+ }catch(e){say('Export error: '+e)}}
+
+/* ---------- boot ---------- */
+(function wait(){if(window.cv&&cv.Mat){$('boot').remove();say('Add a photo to start');
+  if(!narrow()){$('bCrop').style.display=$('bRes').style.display='block'}else tab('crop')}else setTimeout(wait,80)})();
+</script></body></html>
