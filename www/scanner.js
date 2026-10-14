@@ -28,6 +28,7 @@
       const m2 = T(new cv.Mat()); cv.threshold(g, m2, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
       cv.morphologyEx(m2, m2, cv.MORPH_CLOSE, T(cv.Mat.ones(15, 15, cv.CV_8U)));
 
+      const mark = (pts, ok) => { const r = orderPts(pts).map(([x, y]) => [clamp01(x / sw), clamp01(y / sh)]); r.ok = ok; return r; };
       let fallback = null;
       for (const m of [m1, m2]) {
         const cnts = T(new cv.MatVector()), hier = T(new cv.Mat());
@@ -35,6 +36,7 @@
         const list = [];
         for (let i = 0; i < cnts.size(); i++) { const c = cnts.get(i); list.push({ c, a: cv.contourArea(c) }); }
         list.sort((x, y) => y.a - x.a);
+        let found = null;
         for (const { c, a } of list.slice(0, 6)) {
           if (a < 0.15 * total) break;
           if (a > 0.98 * total) continue;
@@ -42,15 +44,50 @@
           cv.convexHull(c, hull, false, true);
           cv.approxPolyDP(hull, ap, 0.02 * cv.arcLength(hull, true), true);
           if (ap.rows === 4) {
-            const d = ap.data32S, pts = [[d[0], d[1]], [d[2], d[3]], [d[4], d[5]], [d[6], d[7]]];
-            return orderPts(pts).map(([x, y]) => [clamp01(x / sw), clamp01(y / sh)]);
+            const d = ap.data32S;
+            found = [[d[0], d[1]], [d[2], d[3]], [d[4], d[5]], [d[6], d[7]]];
+            break;
           }
           if (!fallback) fallback = cv.RotatedRect.points(cv.minAreaRect(c)).map(p => [p.x, p.y]);
         }
         list.forEach(o => o.c.delete());
+        if (found) return mark(found, true);
       }
-      if (fallback) return orderPts(fallback).map(([x, y]) => [clamp01(x / sw), clamp01(y / sh)]);
-      return [[0.03, 0.03], [0.97, 0.03], [0.97, 0.97], [0.03, 0.97]];
+      if (fallback) return mark(fallback, true);
+      const dflt = [[0.03, 0.03], [0.97, 0.03], [0.97, 0.97], [0.03, 0.97]]; dflt.ok = false; return dflt;
+    });
+  }
+
+
+  /* ---------- analysis: what kind of picture is this and what is wrong with it ---------- */
+  // returns {doc: paper-like?, blur: laplacian variance (low = blurry), dark: bool, shadow: 0..1 uneven lighting}
+  function analyze(src) {
+    return withTrash(T => {
+      const sc = Math.min(1, 500 / Math.max(src.cols, src.rows));
+      const s = T(new cv.Mat());
+      cv.resize(src, s, new cv.Size(Math.max(8, Math.round(src.cols * sc)), Math.max(8, Math.round(src.rows * sc))), 0, 0, cv.INTER_AREA);
+      const rgb = T(new cv.Mat());
+      if (s.channels() === 4) cv.cvtColor(s, rgb, cv.COLOR_RGBA2RGB); else s.copyTo(rgb);
+      const g = T(new cv.Mat()); cv.cvtColor(rgb, g, cv.COLOR_RGB2GRAY);
+
+      const lap = T(new cv.Mat()), mean = T(new cv.Mat()), std = T(new cv.Mat());
+      cv.Laplacian(g, lap, cv.CV_64F); cv.meanStdDev(lap, mean, std);
+      const blur = std.data64F[0] ** 2;
+
+      const hsv = T(new cv.Mat()); cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
+      const lo = T(new cv.Mat(hsv.rows, hsv.cols, hsv.type(), new cv.Scalar(0, 0, 130, 0)));
+      const hi = T(new cv.Mat(hsv.rows, hsv.cols, hsv.type(), new cv.Scalar(180, 80, 255, 255)));
+      const mask = T(new cv.Mat()); cv.inRange(hsv, lo, hi, mask);
+      const paper = cv.countNonZero(mask) / (hsv.rows * hsv.cols);
+
+      const bright = cv.mean(g)[0];
+
+      const bg = T(new cv.Mat()), tiny = T(new cv.Mat());
+      cv.dilate(g, bg, T(cv.Mat.ones(15, 15, cv.CV_8U)));
+      cv.resize(bg, tiny, new cv.Size(8, 8), 0, 0, cv.INTER_AREA);
+      const mm = cv.minMaxLoc(tiny), shadow = mm.maxVal > 0 ? (mm.maxVal - mm.minVal) / mm.maxVal : 0;
+
+      return { doc: paper > 0.45, blur, dark: bright < 95, shadow, paper, bright };
     });
   }
 
@@ -179,8 +216,8 @@
 
     const f = s.filter;
     if (f === 'gray' || f === 'bw') { const d = new cv.Mat(); cv.cvtColor(img, d, cv.COLOR_RGB2GRAY); swap(d); }
-    if (f !== 'color' && s.shadow) swap(removeShadow(img));
-    if (f !== 'bw' && s.whitepoint) whitePoint(img);
+    if ((f !== 'color' && s.shadow) || f === 'magic') swap(removeShadow(img));
+    if ((f !== 'bw' && s.whitepoint) || f === 'magic') whitePoint(img);
 
     cv.convertScaleAbs(img, img, s.contrast / 100, s.brightness);
     const rel = Math.max(img.cols, img.rows) / 1400;
@@ -195,5 +232,5 @@
     return img;
   }
 
-  root.Scan = { detectCorners, warp, capEdge, process, PAGE_MM, orderPts };
+  root.Scan = { detectCorners, analyze, warp, capEdge, process, PAGE_MM, orderPts };
 })(typeof window !== 'undefined' ? window : globalThis);
